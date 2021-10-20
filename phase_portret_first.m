@@ -1,14 +1,14 @@
 function pr3
-clc;
-t=[0 15];
-for x0 = 0:1:10
-    for xdot0 = 0:1:10
-        [t,X]=ode45(@Func,t,[x0; xdot0]);
-        plot(t,X(:,1), t,X(:,2));
+clc
+t=0:0.1:25;
+for x0 = 0:10
+    for y0 = 0:1:10
+        [t,X]=ode45(@Func,t,[x0; y0]);
+        plot(X(:,1),X(:,2));
+        hold on;
     end
 end
 title('«Хищник-жертва» с аддитивным управлением по хищникам');
-legend('Жертвы','Хищники');
 end 
  
 function out=Func(~,x)
