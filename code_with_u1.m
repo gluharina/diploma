@@ -1,4 +1,4 @@
-function pr3
+function pr2
 t=[0 50];
 clc;
 [t,X]=ode45(@Func,t,[4; 2]);
