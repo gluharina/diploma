@@ -1,0 +1,185 @@
+% Параметры ГА
+T=50; %число эпох
+n=50; % размер популяции
+Pc = 0.7; %вероятность кроссинговера
+Pm = 0.05; %вероятность мутации
+r = 0.01; % весовой коэффициент
+b = 2;
+eps = 0.0001;
+ 
+% переменные
+var=3; % число переменных X
+Xl=[0 0 0]; % нижняя граница Xi
+Xr=[10 10 10]; % верхняя граница Xi
+ 
+% инициализация популяции
+P=zeros(n,var); 
+P(:,1:var)=Xl(1:var)+rand(n,var).*(Xr(1:var)-Xl(1:var));
+% заменим недопустимые решения
+for i=1:length(P)
+    while gexist(P(i,1),P(i,2),P(i,3))>0
+        P(:,1:var)=Xl(1:var)+rand(n,var).*(Xr(1:var)-Xl(1:var));
+    end
+end
+ 
+max_y = [];
+for t=1:T
+    [F,penalty] = FitnessPen(P,r);
+    S = Selection(F,P);
+    C = Crossingover(Pc,S);
+    M = Mutate(Pm,[S;C],Xl,Xr);
+    P = [P; M];
+    P = Reduction(P,Xl,Xr,n);
+    % максимум
+    figure(1)
+    max_y = [max_y; Fitness(P(1,:))];
+    %P(1,:)
+    plot(1:t,max_y,'r-')
+    title('Целевая функция')
+    figure(2)
+    scatter3(P(:,1),P(:,2),P(:,3),'ro','MarkerFaceColor','r'), hold on
+scatter3(P(1,1),P(1,2),P(1,3),'ks','MarkerFaceColor','k'), hold off
+    axis([Xl(1) Xr(1) Xl(2) Xr(2) Xl(3) Xr(3)])
+    title(['t = ' num2str(t)])
+    
+    if abs(mean(penalty)) < eps
+        break;
+    else
+        r = b*r;
+    end
+    pause(0.01)
+end
+disp(P(1,:))
+disp(Fitness(P(1,:)))
+
+
+function F = Fitness(X)
+x1 = X(:,1); x2 = X(:,2); x3 = X(:,3);
+% фитнес-функция
+F = (100 - (x1-5).^2 - (x2-5).^2 - (x3-5).^2)/100;
+end
+
+function [F,c] = FitnessPen(X,r)
+F = Fitness(X);
+% штрафная функия
+c = zeros(length(X),1);
+penalty = zeros(length(X),1); 
+for i=1:length(X)
+    % вычислим значения штрафной функции, как обратную функцию
+    c(i) = gexist(X(i,1),X(i,2),X(i,3));
+    if c==0
+        penalty(i) = 0;
+    else
+        penalty(i) = r * (1/c(i));
+    end
+end
+F = F + penalty;
+end
+
+function minc = gexist(x1,x2,x3)
+% проверка существования точки (x1,x2,x3)
+% если с=0 существует, с>0 не существует
+g = @(x1,x2,x3,p,q,r) (x1 - p)^2 + (x2 - q)^2 + (x3 - r)^2 - 0.0625;
+% g <= 0; p,q,r = 1,2,...9
+minc = 0;
+for p=1:9
+for q=1:9
+for r=1:9
+    c = g(x1,x2,x3,p,q,r);
+    if c <= 0 & minc > c
+       minc = c;
+    end
+end
+end
+end
+ 
+end
+
+function p = Crossingover(Pc,parent)
+p = [];
+j = 1:size(parent,2);
+for i=2:size(parent,1);
+    if 1 == randsrc(1,1,[1 0; Pc 1-Pc])
+        w=rand;
+        p1=w*parent(i-1,j)+(1-w)*parent(i,j);
+        p2=w*parent(i,j)+(1-w)*parent(i-1,j);
+        
+        k = 0;  
+        % если получаем недопустимое решение Х, то
+        % отвергаем и повторяем оператор кроссинговера
+        while k < 10 & ( gexist(p1(1),p1(2),p1(3)) > 0 ... 
+                || gexist(p2(1),p2(2),p2(3)) > 0 )
+            w=rand;
+            p1=w*parent(i-1,j)+(1-w)*parent(i,j);
+            p2=w*parent(i,j)+(1-w)*parent(i-1,j);
+            k = k+1;
+        end
+        if k~=10
+            p = [p; p1; p2];
+        end
+    end
+end
+end
+
+function p = Mutate(Pm,p,a,b)
+% мутация (random mutation)
+var = size(p,2);
+for i=1:size(p,1)
+    if 1 == randsrc(1,1,[1 0; Pm 1-Pm])
+        p(i,1:var)=a(1:var)+rand(1,var).*(b(1:var)-a(1:var));
+        
+        % если получаем недопустимое решение Х, то
+        % отвергаем и повторяем оператор мутации
+        while gexist(p(i,1),p(i,2),p(i,3)) > 0
+            p(i,1:var)=a(1:var)+rand(1,var).*(b(1:var)-a(1:var));
+        end
+    end
+end
+ 
+end
+
+function parent = Selection(F,P)
+% Векторная оценка
+npp = floor((1/4)*length(P)); % кол-во подвыборок
+q = floor(size(P,1)/npp); % размер подвыборки
+parent = [];
+for i=1:npp
+    % выберем случайно подвыборку
+    idx = randperm(size(P,1),q);
+    podP = P(idx,:); podF = F(idx);
+    P(idx,:)=[]; F(idx) = [];
+    % выберем лучшую особь из подвыборки
+    [~,maxRow] = max(podF);
+    parent = [parent; podP(maxRow,:)];
+end
+ 
+end
+
+function newP = Reduction(P,a,b,n)
+% отберем особи в соответсвии с верхней и нижней границами Х
+P = max(a,min(b,P));
+% удалим недопустимые значения Х
+i=1;
+while i<length(P)
+    if gexist(P(i,1),P(i,2),P(i,3))>0
+        P(i,:) = [];
+    else
+        i=i+1;
+    end
+end
+ 
+% вычислим значения целевой функции
+F = Fitness(P);
+% отсортируем значения целевой функции в порядке убывания
+[F,idx] = sort(F,'descend');
+% отсортируем популяцию в соответсвии со значениями ЦФ
+P = P(idx,:);
+ 
+% отбор лучших 
+newP = P(F>0.85,:);
+while length(newP)<n
+    newP = [newP; P(randi(length(P)), :)];
+end
+newP = newP(1:n,:);
+end
+
